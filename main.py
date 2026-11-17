@@ -31,13 +31,11 @@ def fetch_latest_post(channel):
         text = re.sub(r'<[^>]+>', '', text)
         text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
         
-        # 🛠 ДОБАВЛЯЕМ ВИДИМЫЕ РАЗДЕЛИТЕЛИ ПЕРЕД КАЖДЫМ КЛЮЧОМ:
+        # 🛠 ВИДИМЫЕ РАЗДЕЛИТЕЛИ ПЕРЕД КАЖДЫМ КЛЮЧОМ:
         protocols = ["happ://", "vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "tuic://"]
         for proto in protocols:
-            # Перед каждым ключом принудительно вставляем линию-разделитель и пустые строки
             text = re.sub(r'(' + re.escape(proto) + ')', r'\n\n-----------------------------------\n\n\1', text)
         
-        # Убираем возможные дубликаты линий, если они вдруг наслоились друг на друга
         text = re.sub(r'(-----------------------------------\s*){2,}', '-----------------------------------', text)
             
         return text.strip()
@@ -45,11 +43,12 @@ def fetch_latest_post(channel):
         print(f"❌ Ошибка при чтении канала {channel}: {e}")
         return None
 
-def send_email(subject, plain_body, html_body, to_emails, user, password):
+def send_email(subject, plain_body, html_body, bcc_emails, user, password):
     try:
         msg = MIMEMultipart('alternative')
         msg['From'] = user
-        msg['To'] = to_emails
+        # Поле To оставляем пустым или ставим скрытое значение, чтобы никто не видел адреса
+        msg['To'] = ""  
         msg['Subject'] = subject
         
         msg.attach(MIMEText(plain_body, 'plain', 'utf-8'))
@@ -57,9 +56,11 @@ def send_email(subject, plain_body, html_body, to_emails, user, password):
         
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(user, password)
-            recipients = [e.strip() for e in to_emails.split(',')]
+            # Список всех получателей для скрытой отправки (BCC)
+            recipients = [e.strip() for e in bcc_emails.split(',')]
+            # Важно: передаем recipients в sendmail, но заголовки To в письме пустые/скрытые
             server.sendmail(user, recipients, msg.as_string())
-        print("✅ Письмо успешно отправлено!")
+        print("✅ Письмо успешно отправлено скрытым получателям!")
     except Exception as e:
         print(f"❌ Ошибка при отправке письма: {e}")
 
@@ -105,8 +106,9 @@ def main():
         gmail_pass = os.environ.get("GMAIL_PASS")
         
         if gmail_user and gmail_pass:
-            recipients = "bayramsanazarow1997@gmail.com, vitamin@sanly.tm"
-            send_email("Новый VPN пост из Telegram", plain_text, html_text, recipients, gmail_user, gmail_pass)
+            # Все адреса перенесены в скрытую рассылку (BCC)
+            recipients_bcc = "bayramsanazarow1997@gmail.com, vitamin@sanly.tm"
+            send_email("Новый VPN пост из Telegram", plain_text, html_text, recipients_bcc, gmail_user, gmail_pass)
         else:
             print("❌ Ошибка: не найдены секреты GMAIL_USER или GMAIL_PASS!")
 
