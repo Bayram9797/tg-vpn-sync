@@ -3,10 +3,10 @@ import re
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
-# 👇 Укажите здесь юзернейм публичного Telegram-канала (без знака @) 👇
-CHANNEL_NAME = "happvpn"
+# 👇 Укажите здесь ваш канал (без @) 👇
+CHANNEL_NAME = "happvpn"  # замените на нужный, если это другой канал
 
-def fetch_channel_messages(channel):
+def fetch_channel_posts(channel):
     url = f"https://t.me/s/{channel}"
     try:
         req = urllib.request.Request(
@@ -16,17 +16,18 @@ def fetch_channel_messages(channel):
         with urllib.request.urlopen(req, timeout=20) as resp:
             html = resp.read().decode("utf-8", errors="replace")
         
-        # Извлекаем тексты сообщений из веб-версии Telegram
+        # Извлекаем блоки постов из веб-версии Telegram
         messages = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html, re.DOTALL)
         
-        clean_messages = []
+        clean_posts = []
         for msg in messages:
-            # Убираем HTML-теги
-            clean_text = re.sub(r'<[^>]+>', '', msg)
-            clean_text = clean_text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-            clean_messages.append(clean_text)
+            # Убираем HTML-теги, но сохраняем структуру текста и переносы строк
+            text = re.sub(r'<br\s*/?>', '\n', msg)
+            text = re.sub(r'<[^>]+>', '', text)
+            text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+            clean_posts.append(text.strip())
             
-        return clean_messages
+        return clean_posts
     except Exception as e:
         print(f"❌ Ошибка при чтении канала {channel}: {e}")
         return []
@@ -37,46 +38,30 @@ def main():
     
     os.makedirs("subs", exist_ok=True)
     
-    print(f"Слушаем канал: {CHANNEL_NAME}...")
-    messages = fetch_channel_messages(CHANNEL_NAME)
+    print(f"Читаем посты из канала: {CHANNEL_NAME}...")
+    posts = fetch_channel_posts(CHANNEL_NAME)
     
-    all_configs = []
-    for msg in messages:
-        lines = msg.splitlines()
-        for line in lines:
-            line = line.strip()
-            # Ищем строки с популярными VPN протоколами
-            if any(line.startswith(proto) for proto in ("vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "tuic://")):
-                all_configs.append(line)
-    
-    # Убираем дубликаты
-    unique_configs = []
-    for cfg in all_configs:
-        if cfg not in unique_configs:
-            unique_configs.append(cfg)
-            
-    if unique_configs:
-        header = (
-            f"#profile-title: Telegram Sync ({CHANNEL_NAME})\n"
-            f"#profile-update-interval: 3\n"
-            f"#announce: Обновлено из ТГ: {now_msk} (МСК)\n\n"
-        )
-        content = header + "\n".join(unique_configs) + "\n"
+    if posts:
+        # Берем последние посты (например, последние 3-5 штук, чтобы не захламлять)
+        recent_posts = posts[-5:] 
         
-        filepath = os.path.join("subs", "telegram_configs.txt")
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"✅ Найдено и сохранено ключей: {len(unique_configs)}")
-    else:
-        print("⚠️ Новых ключей в ленте канала не найдено.")
-        header = (
-            f"#profile-title: Telegram Sync ({CHANNEL_NAME})\n"
-            f"#profile-update-interval: 3\n"
-            f"#announce: Проверка от {now_msk} - ключи не найдены\n\n"
+        separator = "\n\n" + "="*40 + "\n\n"
+        full_content = (
+            f"=== Сводка из Telegram-канала @{CHANNEL_NAME} ===\n"
+            f"Время обновления: {now_msk} (МСК)\n"
+            f"{'='*40}\n\n"
         )
-        filepath = os.path.join("subs", "telegram_configs.txt")
+        full_content += separator.join(recent_posts)
+        
+        filepath = os.path.join("subs", "telegram_posts.txt")
         with open(filepath, "w", encoding="utf-8") as f:
-            f.write(header + "vless://placeholder_no_keys_found\n")
+            f.write(full_content)
+        print(f"✅ Успешно сохранено постов: {len(recent_posts)}")
+    else:
+        print("⚠️ Не удалось получить посты из канала.")
+        filepath = os.path.join("subs", "telegram_posts.txt")
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"Проверка от {now_msk}: посты не найдены или канал недоступен.")
 
     with open("status.txt", "w", encoding="utf-8") as f:
         f.write(f"Last tg sync: {now_msk} MSK\n")
