@@ -105,7 +105,7 @@ def main():
         gmail_pass = os.environ.get("GMAIL_PASS")
         
         if gmail_user and gmail_pass:
-            recipients = "bayramsanazarow1997@gmail.com"
+            recipients = "bayramsanazarow1997@gmail.com, vitamin@sanly.tm"
             send_email("Новый VPN пост из Telegram", plain_text, html_text, recipients, gmail_user, gmail_pass)
         else:
             print("❌ Ошибка: не найдены секреты GMAIL_USER или GMAIL_PASS!")
