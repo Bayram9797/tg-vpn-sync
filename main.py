@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 
-CHANNEL_NAME = "happvpn"  # ваш целевой Telegram-канал
+CHANNEL_NAME = "happvpn"  # ваш Telegram-канал
 LAST_SENT_FILE = "last_sent.txt"
 
 def fetch_latest_post(channel):
@@ -31,9 +31,11 @@ def fetch_latest_post(channel):
         text = re.sub(r'<[^>]+>', '', text)
         text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
         
-        # Принудительно разделяем слипшиеся ключи на новые строки
-        for proto in ["happ://", "vless://", "vmess://", "trojan://", "ss://", "hysteria2://"]:
-            text = re.sub(r'([^\n])(' + proto + ')', r'\1\n\2', text)
+        # 🛠 ЖЕСТКОЕ РАЗДЕЛЕНИЕ СЛИПШИХСЯ СТРОК:
+        # Если перед протоколом нет пробела или переноса строки, принудительно добавляем \n
+        protocols = ["happ://", "vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "tuic://"]
+        for proto in protocols:
+            text = re.sub(r'([^\s\n])(' + re.escape(proto) + ')', r'\1\n\2', text)
             
         return text.strip()
     except Exception as e:
@@ -87,7 +89,6 @@ def main():
             f"{latest_post}"
         )
         
-        # Получаем секреты из окружения GitHub
         gmail_user = os.environ.get("GMAIL_USER")
         gmail_pass = os.environ.get("GMAIL_PASS")
         
