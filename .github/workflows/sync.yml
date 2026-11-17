@@ -1,4 +1,4 @@
-name: Sync VPN from Telegram to Gmail
+name: Sync Telegram Post to Gmail
 
 on:
   push:
@@ -25,22 +25,34 @@ jobs:
       - name: Run Telegram parser script
         run: python main.py
 
-      - name: Send Email with Subscriptions
+      - name: Read email body if exists
+        id: read_body
+        run: |
+          if [ -f email_body.txt ]; then
+            echo "BODY_CONTENT<<EOF" >> $GITHUB_ENV
+            cat email_body.txt >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Email as Text Message
+        if: steps.read_body.outputs.has_changes == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.GMAIL_USER }}
           password: ${{ secrets.GMAIL_PASS }}
-          subject: "VPN из Telegram обновлены"
-          to: "bayramsanazarow1997@gmail.com, noyabr.mm@gmail.com"
+          subject: "Новый VPN пост из Telegram"
+          to: "bayramsanazarow1997@gmail.com"
           from: ${{ secrets.GMAIL_USER }}
-          body: "Актуальные ключи из Telegram-канала прикреплены к этому письму."
-          attachments: subs/*.txt
+          body: ${{ env.BODY_CONTENT }}
 
-      - name: Keep repository active
+      - name: Keep repository active and save state
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add status.txt
-          git diff --staged --quiet || (git commit -m "Update Telegram sync status" && git push)
+          git add status.txt last_sent.txt
+          git diff --staged --quiet || (git commit -m "Update sync status and post state" && git push)
