@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 
-CHANNEL_NAME = "happvpn"
+CHANNEL_NAME = "happvpn"  # ваш Telegram-канал
 LAST_SENT_FILE = "last_sent.txt"
 
 def fetch_latest_post(channel):
@@ -25,13 +25,20 @@ def fetch_latest_post(channel):
         
         raw_msg = messages[-1]
         
+        # Заменяем HTML-переносы на стандартные
         text = re.sub(r'<br\s*/?>', '\n', raw_msg)
+        # Убираем остальные лишние теги
         text = re.sub(r'<[^>]+>', '', text)
         text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
         
+        # 🛠 ДОБАВЛЯЕМ ВИДИМЫЕ РАЗДЕЛИТЕЛИ ПЕРЕД КАЖДЫМ КЛЮЧОМ:
         protocols = ["happ://", "vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "tuic://"]
         for proto in protocols:
-            text = re.sub(r'([^\s\n])(' + re.escape(proto) + ')', r'\1\n\2', text)
+            # Перед каждым ключом принудительно вставляем линию-разделитель и пустые строки
+            text = re.sub(r'(' + re.escape(proto) + ')', r'\n\n-----------------------------------\n\n\1', text)
+        
+        # Убираем возможные дубликаты линий, если они вдруг наслоились друг на друга
+        text = re.sub(r'(-----------------------------------\s*){2,}', '-----------------------------------', text)
             
         return text.strip()
     except Exception as e:
@@ -45,7 +52,6 @@ def send_email(subject, plain_body, html_body, to_emails, user, password):
         msg['To'] = to_emails
         msg['Subject'] = subject
         
-        # Добавляем обычную и HTML версию, чтобы почтовики отображали с переносами
         msg.attach(MIMEText(plain_body, 'plain', 'utf-8'))
         msg.attach(MIMEText(html_body, 'html', 'utf-8'))
         
@@ -80,13 +86,11 @@ def main():
         with open(LAST_SENT_FILE, "w", encoding="utf-8") as f:
             f.write(latest_post)
         
-        # Текст для обычных клиентов
         plain_text = (
             f"Новый пост из канала @{CHANNEL_NAME} ({now_msk} МСК):\n\n"
             f"{latest_post}"
         )
         
-        # HTML-версия: оборачиваем в тег <pre>, который заставляет почту сохранять все переносы строк и форматирование
         escaped_post = latest_post.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         html_text = f"""
         <html>
