@@ -3,10 +3,11 @@ import re
 import urllib.request
 from datetime import datetime, timezone, timedelta
 
-# 👇 Укажите здесь ваш канал (без @) 👇
-CHANNEL_NAME = "happvpn"  # замените на нужный, если это другой канал
+CHANNEL_NAME = "happvpn"  # ваш канал
+LAST_SENT_FILE = "last_sent.txt"
+EMAIL_BODY_FILE = "email_body.txt"
 
-def fetch_channel_posts(channel):
+def fetch_latest_post(channel):
     url = f"https://t.me/s/{channel}"
     try:
         req = urllib.request.Request(
@@ -16,55 +17,61 @@ def fetch_channel_posts(channel):
         with urllib.request.urlopen(req, timeout=20) as resp:
             html = resp.read().decode("utf-8", errors="replace")
         
-        # Извлекаем блоки постов из веб-версии Telegram
+        # Извлекаем все тексты постов
         messages = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html, re.DOTALL)
+        if not messages:
+            return None
         
-        clean_posts = []
-        for msg in messages:
-            # Убираем HTML-теги, но сохраняем структуру текста и переносы строк
-            text = re.sub(r'<br\s*/?>', '\n', msg)
-            text = re.sub(r'<[^>]+>', '', text)
-            text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-            clean_posts.append(text.strip())
-            
-        return clean_posts
+        # Берем самый последний (самый свежий) пост из конца списка
+        raw_msg = messages[-1]
+        text = re.sub(r'<br\s*/?>', '\n', raw_msg)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+        return text.strip()
     except Exception as e:
         print(f"❌ Ошибка при чтении канала {channel}: {e}")
-        return []
+        return None
 
 def main():
     msk_tz = timezone(timedelta(hours=3))
     now_msk = datetime.now(msk_tz).strftime("%d.%m.%Y %H:%M")
     
-    os.makedirs("subs", exist_ok=True)
+    print(f"Проверяем канал: {CHANNEL_NAME}...")
+    latest_post = fetch_latest_post(CHANNEL_NAME)
     
-    print(f"Читаем посты из канала: {CHANNEL_NAME}...")
-    posts = fetch_channel_posts(CHANNEL_NAME)
-    
-    if posts:
-        # Берем последние посты (например, последние 3-5 штук, чтобы не захламлять)
-        recent_posts = posts[-5:] 
-        
-        separator = "\n\n" + "="*40 + "\n\n"
-        full_content = (
-            f"=== Сводка из Telegram-канала @{CHANNEL_NAME} ===\n"
-            f"Время обновления: {now_msk} (МСК)\n"
-            f"{'='*40}\n\n"
-        )
-        full_content += separator.join(recent_posts)
-        
-        filepath = os.path.join("subs", "telegram_posts.txt")
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(full_content)
-        print(f"✅ Успешно сохранено постов: {len(recent_posts)}")
-    else:
-        print("⚠️ Не удалось получить посты из канала.")
-        filepath = os.path.join("subs", "telegram_posts.txt")
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(f"Проверка от {now_msk}: посты не найдены или канал недоступен.")
+    if not latest_post:
+        print("⚠️ Не удалось получить посты.")
+        return
 
+    # Читаем текст предыдущего отправленного поста
+    previous_post = ""
+    if os.path.exists(LAST_SENT_FILE):
+        with open(LAST_SENT_FILE, "r", encoding="utf-8") as f:
+            previous_post = f.read().strip()
+
+    # Сравниваем свежий пост с прошлым отправленным
+    if latest_post == previous_post:
+        print("ℹ️ Новых постов нет (текст не изменился). Письмо отправляться не будет.")
+        # Удаляем файл тела письма, чтобы GitHub Actions понял, что отправку нужно пропустить
+        if os.path.exists(EMAIL_BODY_FILE):
+            os.remove(EMAIL_BODY_FILE)
+    else:
+        print("🔥 Обнаружен новый пост! Подготавливаем к отправке.")
+        # Сохраняем новый текст как последний отправленный
+        with open(LAST_SENT_FILE, "w", encoding="utf-8") as f:
+            f.write(latest_post)
+        
+        # Записываем текст для тела письма
+        email_content = (
+            f"Новый пост из канала @{CHANNEL_NAME} ({now_msk} МСК):\n\n"
+            f"{latest_post}"
+        )
+        with open(EMAIL_BODY_FILE, "w", encoding="utf-8") as f:
+            f.write(email_content)
+
+    # Обновляем статус для активности репозитория
     with open("status.txt", "w", encoding="utf-8") as f:
-        f.write(f"Last tg sync: {now_msk} MSK\n")
+        f.write(f"Last check: {now_msk} MSK\n")
 
 if __name__ == "__main__":
     main()
