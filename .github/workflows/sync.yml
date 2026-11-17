@@ -1,11 +1,11 @@
 name: Sync Telegram Post to Gmail
 
 on:
+  repository_dispatch:
+    types: [trigger_sync]
+  workflow_dispatch:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
-  schedule:
-    - cron: '15 */3 * * *'
 
 permissions:
   contents: write
