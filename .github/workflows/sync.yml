@@ -22,33 +22,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run Telegram parser script
+      - name: Run Telegram parser and sender script
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
         run: python main.py
-
-      - name: Read email body if exists
-        id: read_body
-        run: |
-          if [ -f email_body.txt ]; then
-            echo "BODY_CONTENT<<EOF" >> $GITHUB_ENV
-            cat email_body.txt >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Send Email as Text Message
-        if: steps.read_body.outputs.has_changes == 'true'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.GMAIL_USER }}
-          password: ${{ secrets.GMAIL_PASS }}
-          subject: "Новый VPN пост из Telegram"
-          to: "bayramsanazarow1997@gmail.com"
-          from: ${{ secrets.GMAIL_USER }}
-          body: ${{ env.BODY_CONTENT }}
 
       - name: Keep repository active and save state
         run: |
