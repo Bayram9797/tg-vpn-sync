@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone, timedelta
 
-CHANNEL_NAME = "happvpn"  # ваш канал
+CHANNEL_NAME = "happvpn"  # ваш целевой Telegram-канал
 LAST_SENT_FILE = "last_sent.txt"
 
 def fetch_latest_post(channel):
@@ -24,9 +24,17 @@ def fetch_latest_post(channel):
             return None
         
         raw_msg = messages[-1]
+        
+        # Заменяем HTML-переносы на стандартные
         text = re.sub(r'<br\s*/?>', '\n', raw_msg)
+        # Убираем остальные лишние теги
         text = re.sub(r'<[^>]+>', '', text)
         text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+        
+        # Принудительно разделяем слипшиеся ключи на новые строки
+        for proto in ["happ://", "vless://", "vmess://", "trojan://", "ss://", "hysteria2://"]:
+            text = re.sub(r'([^\n])(' + proto + ')', r'\1\n\2', text)
+            
         return text.strip()
     except Exception as e:
         print(f"❌ Ошибка при чтении канала {channel}: {e}")
@@ -65,12 +73,12 @@ def main():
         with open(LAST_SENT_FILE, "r", encoding="utf-8") as f:
             previous_post = f.read().strip()
 
-    # Сравниваем
+    # Сравниваем тексты
     if latest_post == previous_post:
         print("ℹ️ Новых постов нет (текст не изменился). Письмо не отправляется.")
     else:
         print("🔥 Обнаружен новый пост! Отправляем...")
-        # Сохраняем новый текст
+        # Сохраняем новый текст в историю
         with open(LAST_SENT_FILE, "w", encoding="utf-8") as f:
             f.write(latest_post)
         
@@ -79,7 +87,7 @@ def main():
             f"{latest_post}"
         )
         
-        # Берем секреты из окружения GitHub
+        # Получаем секреты из окружения GitHub
         gmail_user = os.environ.get("GMAIL_USER")
         gmail_pass = os.environ.get("GMAIL_PASS")
         
@@ -89,7 +97,7 @@ def main():
         else:
             print("❌ Ошибка: не найдены секреты GMAIL_USER или GMAIL_PASS!")
 
-    # Обновляем статус для активности репозитория
+    # Обновляем статус для активности репозитория (защита от засыпания)
     with open("status.txt", "w", encoding="utf-8") as f:
         f.write(f"Last check: {now_msk} MSK\n")
 
