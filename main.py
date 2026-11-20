@@ -13,31 +13,37 @@ def fetch_latest_post(channel):
     url = f"https://t.me/s/{channel}"
     try:
         req = urllib.request.Request(
-            url, 
+            url,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         )
         with urllib.request.urlopen(req, timeout=20) as resp:
             html = resp.read().decode("utf-8", errors="replace")
-        
+
         messages = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html, re.DOTALL)
         if not messages:
             return None
-        
+
         raw_msg = messages[-1]
-        
-        # Заменяем HTML-переносы на стандартные
+
+        # Заменяем HTML-переносы и закрывающие блоки на стандартные переносы строк
         text = re.sub(r'<br\s*/?>', '\n', raw_msg)
-        # Убираем остальные лишние теги
+        text = re.sub(r'</p>|</div>', '\n', text)
+        # Убираем остальные HTML-теги
         text = re.sub(r'<[^>]+>', '', text)
-        text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-        
-        # 🛠 ВИДИМЫЕ РАЗДЕЛИТЕЛИ ПЕРЕД КАЖДЫМ КЛЮЧОМ:
+        text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
+
+        # Аккуратные пустые строки перед ключами без линий-разделителей
         protocols = ["happ://", "vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "tuic://"]
         for proto in protocols:
-            text = re.sub(r'(' + re.escape(proto) + ')', r'\n\n-----------------------------------\n\n\1', text)
-        
-        text = re.sub(r'(-----------------------------------\s*){2,}', '-----------------------------------', text)
-            
+            text = re.sub(r'(' + re.escape(proto) + ')', r'\n\n\1', text)
+
+        # Отделяем строку клиентов/подписок, чтобы она не слипалась с предыдущим блоком
+        text = re.sub(r'(?m)^([^\n]*\b(?:v2box|v2raytun|Incy)\b[^\n]*)$', r'\n\1\n', text)
+
+        # Убираем пробелы в концах строк и лишние пустые строки (максимум одна пустая строка подряд)
+        text = re.sub(r'[ \t]+\n', '\n', text)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+
         return text.strip()
     except Exception as e:
         print(f"❌ Ошибка при чтении канала {channel}: {e}")
@@ -47,18 +53,16 @@ def send_email(subject, plain_body, html_body, bcc_emails, user, password):
     try:
         msg = MIMEMultipart('alternative')
         msg['From'] = user
-        # Поле To оставляем пустым или ставим скрытое значение, чтобы никто не видел адреса
-        msg['To'] = ""  
+        # Поле To оставляем пустым, чтобы получатели не видели адреса друг друга
+        msg['To'] = ""
         msg['Subject'] = subject
-        
+
         msg.attach(MIMEText(plain_body, 'plain', 'utf-8'))
         msg.attach(MIMEText(html_body, 'html', 'utf-8'))
-        
+
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(user, password)
-            # Список всех получателей для скрытой отправки (BCC)
-            recipients = [e.strip() for e in bcc_emails.split(',')]
-            # Важно: передаем recipients в sendmail, но заголовки To в письме пустые/скрытые
+            recipients = [e.strip() for e in bcc_emails.split(',') if e.strip()]
             server.sendmail(user, recipients, msg.as_string())
         print("✅ Письмо успешно отправлено скрытым получателям!")
     except Exception as e:
@@ -67,10 +71,10 @@ def send_email(subject, plain_body, html_body, bcc_emails, user, password):
 def main():
     msk_tz = timezone(timedelta(hours=3))
     now_msk = datetime.now(msk_tz).strftime("%d.%m.%Y %H:%M")
-    
-    print(f"Проверяем канал: {CHANNEL_NAME}...")
+
+    print(f"Проверяем канал: {CHANNEL_NAME} в {now_msk} МСК...")
     latest_post = fetch_latest_post(CHANNEL_NAME)
-    
+
     if not latest_post:
         print("⚠️ Не удалось получить посты.")
         return
@@ -86,12 +90,12 @@ def main():
         print("🔥 Обнаружен новый пост! Отправляем...")
         with open(LAST_SENT_FILE, "w", encoding="utf-8") as f:
             f.write(latest_post)
-        
+
         plain_text = (
             f"Новый пост из канала @{CHANNEL_NAME} ({now_msk} МСК):\n\n"
             f"{latest_post}"
         )
-        
+
         escaped_post = latest_post.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         html_text = f"""
         <html>
@@ -101,12 +105,11 @@ def main():
         </body>
         </html>
         """
-        
+
         gmail_user = os.environ.get("GMAIL_USER")
         gmail_pass = os.environ.get("GMAIL_PASS")
-        
+
         if gmail_user and gmail_pass:
-            # Все адреса перенесены в скрытую рассылку (BCC)
             recipients_bcc = "bayramsanazarow1997@gmail.com, vitamin@sanly.tm"
             send_email("Новый VPN пост из Telegram", plain_text, html_text, recipients_bcc, gmail_user, gmail_pass)
         else:
